@@ -23,10 +23,6 @@ function fg(r: number, g: number, b: number) {
   return `\x1b[38;2;${r};${g};${b}m`;
 }
 
-function bg(r: number, g: number, b: number) {
-  return `\x1b[48;2;${r};${g};${b}m`;
-}
-
 function resetFg() {
   return "\x1b[39m";
 }
@@ -34,15 +30,6 @@ function resetFg() {
 function resetBg() {
   return "\x1b[49m";
 }
-
-type RenderOpts = {
-  pngPath: string;
-  widthCols: number;
-  heightPx?: number;
-  scaleX?: number;
-  scaleY?: number;
-  flipX?: boolean;
-};
 
 function snapToMultiple(n: number, m: number) {
   return Math.max(m, Math.round(n / m) * m);
@@ -179,23 +166,6 @@ async function renderLogoAnsiLines(opts: {
   return lines;
 }
 
-let cached: { key: string; lines: string[] } | null = null;
-
-async function getSplashLines(): Promise<string[]> {
-  const cols = termColumns();
-  // Reserve some space for margins; keep within sane bounds.
-  const width = clamp(Math.floor(cols * 0.55), 34, 60);
-
-  const url = new URL("../assets/togalma-logo-square.png", import.meta.url);
-  const path = fileURLToPath(url);
-  const key = `${path}::${width}`;
-
-  if (cached && cached.key === key) return cached.lines;
-  const lines = await renderLogoAnsiLines({ pngPath: path, widthCols: width });
-  cached = { key, lines };
-  return lines;
-}
-
 export async function playMenuSplash(): Promise<void> {
   if (process.env.TOGALMA_NO_SPLASH) return;
   if (!process.stdout.isTTY || !process.stdin.isTTY) return;
@@ -215,7 +185,7 @@ export async function playMenuSplash(): Promise<void> {
   // Vertical-axis rotation illusion:
   // - scaleX goes 1 -> ~0 -> 1
   // - second half is mirrored (flipX)
-  const frames = 14;
+  const frames: number = 14;
   const msPerFrame = 32;
   process.stdout.write(CLEAR_AND_HOME);
 
