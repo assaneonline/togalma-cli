@@ -1,0 +1,46 @@
+{
+  "name": "@togalma/cli",
+  "version": "0.2.0",
+  "description": "Developer-friendly CLI to order lunch from Togalma.",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist/",
+    "bin/",
+    "README.md",
+    "assets/"
+  ],
+  "type": "module",
+  "bin": {
+    "togalma": "bin/togalma"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "build": "node scripts/build.mjs",
+    "start": "node dist/cli.js",
+    "prepublishOnly": "npm run build",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^7.4.1",
+    "chalk": "^5.6.2",
+    "commander": "^14.0.1",
+    "env-paths": "^3.0.0",
+    "open": "^10.2.0",
+    "ora": "^8.2.0",
+    "sharp": "^0.34.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^24.12.0",
+    "eslint": "^9.39.4",
+    "globals": "^17.4.0",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.5",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.57.0"
+  }
+}
