@@ -51,6 +51,36 @@ togalma orders show <recOrderId>
 - **`TOGALMA_NO_SPLASH=1`**: désactive l’animation au démarrage du menu.
 - **`TOGALMA_NO_UPDATE_CHECK=1`**: désactive la vérification de mise à jour (sinon, max 1 fois/jour).
 
+### Autocomplétion (Tab)
+
+Le dépôt contient des scripts dans `completions/` (zsh, bash, fish). Ils sont **statiques**: si on ajoute des commandes/options, il faut mettre à jour les scripts.
+
+#### zsh
+
+```bash
+mkdir -p ~/.zsh/completions
+cp "$(npm root -g)/@togalma/cli/completions/togalma.zsh" ~/.zsh/completions/_togalma
+
+# Ajoutez ceci à votre ~/.zshrc si nécessaire:
+fpath=(~/.zsh/completions $fpath)
+autoload -U compinit && compinit
+```
+
+#### bash
+
+```bash
+mkdir -p ~/.bash_completion.d
+cp "$(npm root -g)/@togalma/cli/completions/togalma.bash" ~/.bash_completion.d/togalma
+source ~/.bash_completion.d/togalma
+```
+
+#### fish
+
+```bash
+mkdir -p ~/.config/fish/completions
+cp "$(npm root -g)/@togalma/cli/completions/togalma.fish" ~/.config/fish/completions/togalma.fish
+```
+
 ### Où la session est stockée ?
 
 Le CLI sauvegarde un fichier JSON contenant votre **token** (session locale). Par défaut le chemin est déterminé via `env-paths` (dépend de l’OS).
@@ -120,6 +150,36 @@ togalma orders show <recOrderId>
 - **`TOGALMA_SESSION_PATH`**: full path to the JSON session file (override).
 - **`TOGALMA_NO_SPLASH=1`**: disables the menu splash animation.
 - **`TOGALMA_NO_UPDATE_CHECK=1`**: disables update checks (otherwise at most once/day).
+
+### Tab completion
+
+Completion scripts live in `completions/` (zsh, bash, fish). They are **static**: when commands/options change, the scripts must be updated too.
+
+#### zsh
+
+```bash
+mkdir -p ~/.zsh/completions
+cp "$(npm root -g)/@togalma/cli/completions/togalma.zsh" ~/.zsh/completions/_togalma
+
+# Add this to ~/.zshrc if needed:
+fpath=(~/.zsh/completions $fpath)
+autoload -U compinit && compinit
+```
+
+#### bash
+
+```bash
+mkdir -p ~/.bash_completion.d
+cp "$(npm root -g)/@togalma/cli/completions/togalma.bash" ~/.bash_completion.d/togalma
+source ~/.bash_completion.d/togalma
+```
+
+#### fish
+
+```bash
+mkdir -p ~/.config/fish/completions
+cp "$(npm root -g)/@togalma/cli/completions/togalma.fish" ~/.config/fish/completions/togalma.fish
+```
 
 ### Where is the session stored?
 

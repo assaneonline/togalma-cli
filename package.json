@@ -9,7 +9,8 @@
     "dist/",
     "bin/",
     "README.md",
-    "assets/"
+    "assets/",
+    "completions/"
   ],
   "type": "module",
   "bin": {
