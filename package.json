@@ -1,6 +1,6 @@
 {
   "name": "@togalma/cli",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Developer-friendly CLI to order lunch from Togalma.",
   "publishConfig": {
     "access": "public"
