@@ -31,6 +31,7 @@ togalma order create
 # Auth
 togalma auth register
 togalma auth login
+togalma auth recover
 togalma auth logout
 togalma auth whoami
 
@@ -43,6 +44,18 @@ togalma order pay <recOrderId>
 togalma orders list
 togalma orders show <recOrderId>
 ```
+
+### Récupérer son PIN
+
+Si vous avez oublié votre PIN, utilisez:
+
+```bash
+togalma auth recover
+```
+
+Votre PIN sera renvoyé via WhatsApp.
+
+Astuce: si vous faites `togalma auth register` avec un numéro déjà existant, le CLI vous proposera directement de **récupérer le PIN**.
 
 ### Configuration (variables d’environnement)
 
@@ -101,6 +114,7 @@ togalma order create
 # Auth
 togalma auth register
 togalma auth login
+togalma auth recover
 togalma auth logout
 togalma auth whoami
 
@@ -113,6 +127,18 @@ togalma order pay <recOrderId>
 togalma orders list
 togalma orders show <recOrderId>
 ```
+
+### PIN recovery
+
+If you forgot your PIN, run:
+
+```bash
+togalma auth recover
+```
+
+Your PIN will be re-sent via WhatsApp.
+
+Tip: if you run `togalma auth register` with a phone number that already exists, the CLI will offer to **recover your PIN**.
 
 ### Configuration (environment variables)
 
