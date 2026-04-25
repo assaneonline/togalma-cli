@@ -55,6 +55,24 @@ export async function register(
   );
 }
 
+export async function recoverPin(
+  baseUrl: string,
+  payload: { phone: string; whatsapp: boolean }
+) {
+  return await requestJson(
+    baseUrl,
+    {
+      method: "POST",
+      path: "/api/cli-v1/auth/recover",
+      body: payload,
+    },
+    z.object({
+      success: z.boolean().optional(),
+      message: z.string(),
+    })
+  );
+}
+
 export async function menu(
   session: Session,
   params: { search?: string; date?: string; category?: string }

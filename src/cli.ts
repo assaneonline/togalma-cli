@@ -293,6 +293,44 @@ auth
       );
     } catch (e) {
       spinner.fail("Registration failed");
+      if (e instanceof HttpError && (e as any).status === 409) {
+        process.stderr.write(
+          chalk.yellow(
+            "An account already exists for this phone number. You can recover your PIN via WhatsApp.\n"
+          )
+        );
+        const doRecover = await inqConfirm({
+          message: "Recover PIN now?",
+          default: true,
+        });
+        if (doRecover) {
+          const rec = await api.recoverPin(baseUrl, { phone, whatsapp: true });
+          process.stdout.write(`${rec.message}\n`);
+          process.stdout.write("Then login: togalma auth login\n");
+          return;
+        }
+      }
+      printHttpError(e);
+      process.exitCode = 1;
+    }
+  });
+
+auth
+  .command("recover")
+  .description("Recover your PIN (sent via WhatsApp)")
+  .action(async () => {
+    const opts = program.opts<{ baseUrl?: string; allowInsecure: boolean }>();
+    const baseUrl = baseUrlFromEnvOrFlag(opts.baseUrl);
+    ensureHttps(baseUrl, opts.allowInsecure);
+
+    const phone = await promptPhone();
+    const spinner = ora("Requesting PIN recovery...").start();
+    try {
+      const res = await api.recoverPin(baseUrl, { phone, whatsapp: true });
+      spinner.succeed(res.message);
+      process.stdout.write("Then login: togalma auth login\n");
+    } catch (e) {
+      spinner.fail("PIN recovery failed");
       printHttpError(e);
       process.exitCode = 1;
     }
