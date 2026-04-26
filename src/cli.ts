@@ -215,6 +215,9 @@ async function interactiveOrderFromItems(s: Session, items: any[], defaultDate: 
 
   process.stdout.write("\n");
   if (process.stdout.isTTY) {
+    process.stdout.write(
+      `Pay later: togalma order pay ${created.order_id} (or just: togalma order pay within 5 minutes)\n\n`
+    );
     const payNow = await inqConfirm({
       message: "Pay now with Wave?",
       default: true,
@@ -450,7 +453,7 @@ program
       if (opts.order !== false && process.stdout.isTTY) {
         const go = await inqConfirm({
           message: "Create an order from this menu now?",
-          default: false,
+          default: true,
         });
         if (go) {
           await interactiveOrderFromItems(s, items as any[], opts.date ?? todayYmd(), debug);
