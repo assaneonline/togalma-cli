@@ -5,6 +5,10 @@ const RESET = "\x1b[0m";
 const CLEAR_AND_HOME = "\x1b[2J\x1b[H";
 const HOME = "\x1b[H";
 const CLEAR_TO_END = "\x1b[J";
+const ALT_SCREEN_ON = "\x1b[?1049h";
+const ALT_SCREEN_OFF = "\x1b[?1049l";
+const CURSOR_HIDE = "\x1b[?25l";
+const CURSOR_SHOW = "\x1b[?25h";
 
 function sleep(ms: number) {
   return new Promise<void>((r) => setTimeout(r, ms));
@@ -23,12 +27,39 @@ function fg(r: number, g: number, b: number) {
   return `\x1b[38;2;${r};${g};${b}m`;
 }
 
+function fg256(code: number) {
+  const c = clamp(Math.round(code), 0, 255);
+  return `\x1b[38;5;${c}m`;
+}
+
 function resetFg() {
   return "\x1b[39m";
 }
 
 function resetBg() {
   return "\x1b[49m";
+}
+
+type ColorMode = "truecolor" | "ansi256" | "mono";
+
+function detectColorMode(): ColorMode {
+  const forced = String(process.env.TOGALMA_SPLASH_COLOR ?? "").trim().toLowerCase();
+  if (forced === "0" || forced === "false" || forced === "off" || forced === "mono") return "mono";
+  if (forced === "256" || forced === "ansi256") return "ansi256";
+  if (forced === "truecolor" || forced === "24bit") return "truecolor";
+
+  const colorterm = String(process.env.COLORTERM ?? "").toLowerCase();
+  if (colorterm.includes("truecolor") || colorterm.includes("24bit")) return "truecolor";
+
+  const term = String(process.env.TERM ?? "").toLowerCase();
+  if (term.includes("256color")) return "ansi256";
+
+  // Apple Terminal historically behaves inconsistently with 24-bit sequences depending on settings.
+  // Prefer stability over color fidelity unless truecolor is explicitly advertised.
+  const termProgram = String(process.env.TERM_PROGRAM ?? "");
+  if (termProgram === "Apple_Terminal") return "ansi256";
+
+  return "mono";
 }
 
 function snapToMultiple(n: number, m: number) {
@@ -65,6 +96,7 @@ async function renderLogoAnsiLines(opts: {
   scaleX?: number;
   scaleY?: number;
   flipX?: boolean;
+  colorMode: ColorMode;
 }): Promise<string[]> {
   // Finer granularity: Braille (2x4 pixels per character).
   const scaleX = typeof opts.scaleX === "number" && Number.isFinite(opts.scaleX) ? opts.scaleX : 1;
@@ -151,15 +183,30 @@ async function renderLogoAnsiLines(opts: {
 
       const mask = brailleMaskFrom2x4(on);
       if (mask === 0 || n === 0) {
-        line += resetFg() + resetBg() + " ";
+        // Keep empty cells as plain spaces to reduce SGR chatter (and prevent color bleed on odd terminals).
+        line += " ";
         continue;
       }
 
       const rr = Math.round(rSum / n);
       const gg = Math.round(gSum / n);
       const bb = Math.round(bSum / n);
-      line += resetBg() + fg(rr, gg, bb) + brailleChar(mask);
+      const ch = brailleChar(mask);
+      if (opts.colorMode === "mono") {
+        line += ch;
+      } else if (opts.colorMode === "ansi256") {
+        // Approximate RGB to a 6x6x6 cube + grayscale range (xterm-256).
+        // This is intentionally lightweight (animation stability > perfect color).
+        const r6 = clamp(Math.round((rr / 255) * 5), 0, 5);
+        const g6 = clamp(Math.round((gg / 255) * 5), 0, 5);
+        const b6 = clamp(Math.round((bb / 255) * 5), 0, 5);
+        const cube = 16 + 36 * r6 + 6 * g6 + b6;
+        line += fg256(cube) + ch + resetFg();
+      } else {
+        line += fg(rr, gg, bb) + ch + resetFg();
+      }
     }
+    // Ensure we fully reset at end of each line to avoid "sticky" styles on some terminals.
     line += RESET;
     lines.push(line);
   }
@@ -174,6 +221,7 @@ export async function playMenuSplash(): Promise<void> {
   const width = clamp(Math.floor(cols * 0.55), 34, 60);
   const url = new URL("../assets/togalma-logo-square.png", import.meta.url);
   const path = fileURLToPath(url);
+  const colorMode = detectColorMode();
 
   // Precompute a constant pixel height from the base render so all frames have
   // identical line count (prevents vertical drift and trails).
@@ -186,9 +234,13 @@ export async function playMenuSplash(): Promise<void> {
   // - scaleX goes 1 -> ~0 -> 1
   // - second half is mirrored (flipX)
   const frames: number = 14;
-  const msPerFrame = 32;
-  process.stdout.write(CLEAR_AND_HOME);
+  const msPerFrameEnv = Number(process.env.TOGALMA_SPLASH_MS_PER_FRAME);
+  const msPerFrame = Number.isFinite(msPerFrameEnv) && msPerFrameEnv > 0 ? msPerFrameEnv : 65;
+  const holdMsEnv = Number(process.env.TOGALMA_SPLASH_HOLD_MS);
+  const holdMs = Number.isFinite(holdMsEnv) && holdMsEnv >= 0 ? holdMsEnv : 450;
 
+  // Pre-render frames first to avoid partial paints/flicker while sharp is working.
+  const renderedFrames: string[] = [];
   for (let i = 0; i < frames; i++) {
     const t = frames === 1 ? 0 : i / (frames - 1); // 0..1
     const theta = t * Math.PI; // 0..π
@@ -208,13 +260,22 @@ export async function playMenuSplash(): Promise<void> {
       scaleX: rotX * zoom,
       scaleY: zoom,
       flipX,
+      colorMode,
     });
-    process.stdout.write(HOME);
-    process.stdout.write(CLEAR_TO_END);
-    process.stdout.write(lines.join("\n"));
-    await sleep(msPerFrame);
+    renderedFrames.push(lines.join("\n"));
   }
 
-  process.stdout.write("\n");
+  // Paint frames in an isolated screen buffer for a clean animation.
+  process.stdout.write(ALT_SCREEN_ON + CURSOR_HIDE + CLEAR_AND_HOME);
+  try {
+    for (const frame of renderedFrames) {
+      process.stdout.write(HOME + CLEAR_TO_END);
+      process.stdout.write(frame);
+      await sleep(msPerFrame);
+    }
+    if (holdMs > 0) await sleep(holdMs);
+  } finally {
+    process.stdout.write(RESET + CURSOR_SHOW + ALT_SCREEN_OFF);
+  }
 }
 
