@@ -87,6 +87,29 @@ function printHttpError(e: unknown) {
   process.stderr.write(chalk.red(`Error: ${(e as any)?.message ?? String(e)}\n`));
 }
 
+async function wavePayFlow(session: Session, orderId: string, timeoutSecondsRaw: string | number = 600) {
+  const { checkout_url } = await api.waveCheckoutUrl(session, orderId);
+
+  process.stdout.write(`Opening: ${checkout_url}\n`);
+  await open(checkout_url);
+
+  const timeoutSeconds = typeof timeoutSecondsRaw === "string" ? Number(timeoutSecondsRaw) : timeoutSecondsRaw;
+  const deadline = Date.now() + Math.max(10, timeoutSeconds) * 1000;
+
+  const spinner = ora("Waiting for payment confirmation...").start();
+  while (Date.now() < deadline) {
+    const st = await api.payStatus(session, orderId);
+    if (st.paid) {
+      spinner.succeed(`Paid (${st.payment_status})`);
+      return;
+    }
+    spinner.text = `Waiting... (${st.payment_status || "unknown"})`;
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  spinner.fail("Timed out waiting for payment.");
+  process.exitCode = 2;
+}
+
 async function interactiveOrderFromItems(s: Session, items: any[], defaultDate: string, debug = false) {
   if (items.length === 0) {
     process.stdout.write("Menu is empty.\n");
@@ -114,19 +137,19 @@ async function interactiveOrderFromItems(s: Session, items: any[], defaultDate: 
     const item = picked.item;
 
     try {
-      const { variantLabel, unitPriceFcfa } = await pickVariant(item, {
+      const { variantLabel, unitPriceFcfa, orderItemId } = await pickVariant(item, {
         debug,
         allowedFormulaire: s.user?.formulaireAccessible ?? null,
       });
       const quantity = await promptQuantity(1);
 
       const existing = cart.find(
-        (ln) => ln.item.id === item.id && ln.variantLabel === variantLabel
+        (ln) => ln.orderItemId === orderItemId && ln.variantLabel === variantLabel
       );
       if (existing) {
         existing.quantity += quantity;
       } else {
-        cart.push({ item, variantLabel, unitPriceFcfa, quantity });
+        cart.push({ item, orderItemId, variantLabel, unitPriceFcfa, quantity });
       }
     } catch (e) {
       // Never abort the whole order flow for a single item issue.
@@ -160,19 +183,19 @@ async function interactiveOrderFromItems(s: Session, items: any[], defaultDate: 
     dishes: cart
       .filter((ln) => (ln.item.category ?? "").toLowerCase() === "plat")
       .map((ln) => ({
-        id: ln.item.id,
+        id: ln.orderItemId,
         quantity: ln.quantity,
       })),
     desserts: cart
       .filter((ln) => (ln.item.category ?? "").toLowerCase() === "dessert")
       .map((ln) => ({
-        id: ln.item.id,
+        id: ln.orderItemId,
         quantity: ln.quantity,
       })),
     drinks: cart
       .filter((ln) => (ln.item.category ?? "").toLowerCase() === "boisson")
       .map((ln) => ({
-        id: ln.item.id,
+        id: ln.orderItemId,
         quantity: ln.quantity,
       })),
   };
@@ -182,10 +205,55 @@ async function interactiveOrderFromItems(s: Session, items: any[], defaultDate: 
   creating.succeed(`Order created: ${created.order_id}`);
   process.stdout.write(`Wave checkout: ${created.checkout_url}\n`);
 
+  // Cache last created order locally to support `togalma order pay` without an id.
+  try {
+    s.lastOrder = { id: created.order_id, createdAt: new Date().toISOString() };
+    await saveSession(s);
+  } catch {
+    // best-effort
+  }
+
   process.stdout.write("\n");
-  process.stdout.write(
-    `Continue checkout: open the Wave link above (or re-open later with: togalma order pay ${created.order_id}).\n`
-  );
+  if (process.stdout.isTTY) {
+    const payNow = await inqConfirm({
+      message: "Pay now with Wave?",
+      default: true,
+    });
+    if (payNow) {
+      await wavePayFlow(s, created.order_id, 600);
+      return;
+    }
+  }
+
+  process.stdout.write(`Tip: Pay later with: togalma order pay ${created.order_id}\n`);
+}
+
+async function resolveRecentOrderIdOrThrow(s: Session): Promise<string> {
+  const windowMs = 5 * 60 * 1000;
+
+  const local = s.lastOrder ?? null;
+  if (local?.id && local?.createdAt) {
+    const t = Date.parse(local.createdAt);
+    if (Number.isFinite(t) && Date.now() - t <= windowMs) {
+      return local.id;
+    }
+  }
+
+  // Fallback: ask the API for recent orders.
+  const res = (await api.listOrders(s, 5)) as any;
+  const list = Array.isArray(res?.orders) ? res.orders : [];
+  for (const o of list) {
+    const id = String(o?.id ?? o?.order_id ?? "").trim();
+    const dateRaw = String(o?.date ?? o?.Date ?? "").trim();
+    if (!id || !dateRaw) continue;
+    const t = Date.parse(dateRaw);
+    if (!Number.isFinite(t)) continue;
+    if (Date.now() - t <= windowMs) {
+      return id;
+    }
+  }
+
+  throw new Error("No recent order found (last 5 minutes). Provide an id: togalma order pay <orderId>");
 }
 
 const program = new Command();
@@ -418,31 +486,13 @@ order
 order
   .command("pay")
   .description("Pay with Wave (opens browser + polls status)")
-  .argument("<orderId>", "Airtable order record id (rec...)")
+  .argument("[orderId]", "Airtable order record id (rec...)")
   .option("--timeout-seconds <n>", "Max wait time", "600")
-  .action(async (orderId: string, opts: { timeoutSeconds: string }) => {
+  .action(async (orderId: string | undefined, opts: { timeoutSeconds: string }) => {
     try {
       const s = await requireSession();
-      const { checkout_url } = await api.waveCheckoutUrl(s, orderId);
-
-      process.stdout.write(`Opening: ${checkout_url}\n`);
-      await open(checkout_url);
-
-      const timeoutSeconds = Number(opts.timeoutSeconds);
-      const deadline = Date.now() + Math.max(10, timeoutSeconds) * 1000;
-
-      const spinner = ora("Waiting for payment confirmation...").start();
-      while (Date.now() < deadline) {
-        const st = await api.payStatus(s, orderId);
-        if (st.paid) {
-          spinner.succeed(`Paid (${st.payment_status})`);
-          return;
-        }
-        spinner.text = `Waiting... (${st.payment_status || "unknown"})`;
-        await new Promise((r) => setTimeout(r, 3000));
-      }
-      spinner.fail("Timed out waiting for payment.");
-      process.exitCode = 2;
+      const resolvedId = orderId && orderId.trim() !== "" ? orderId.trim() : await resolveRecentOrderIdOrThrow(s);
+      await wavePayFlow(s, resolvedId, opts.timeoutSeconds);
     } catch (e) {
       printHttpError(e);
       process.exitCode = 1;

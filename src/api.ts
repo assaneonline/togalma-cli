@@ -100,6 +100,7 @@ export async function menu(
           variants: z
             .array(
               z.object({
+                id: z.string().optional().nullable(),
                 format: z.string().optional().nullable(),
                 price_fcfa: z.number().optional().nullable(),
                 base_price_fcfa: z.number().optional().nullable(),

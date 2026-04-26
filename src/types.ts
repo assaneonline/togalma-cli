@@ -19,9 +19,15 @@ export type Session = {
   createdAt: string;
   /** ISO timestamp of last `/auth/me` refresh (best-effort) */
   userRefreshedAt?: string | null;
+  /**
+   * Last order created from this CLI (best-effort).
+   * Used as default for `togalma order pay` when no id is provided.
+   */
+  lastOrder?: { id: string; createdAt: string } | null;
 };
 
 export type MenuItemVariant = {
+  id?: string | null;
   format?: string | null;
   price_fcfa?: number | null;
   base_price_fcfa?: number | null;
@@ -45,6 +51,8 @@ export type MenuItem = {
 
 export type CartLine = {
   item: MenuItem;
+  /** Record id to use when creating an order (variant id for plats). */
+  orderItemId: string;
   variantLabel: string;
   unitPriceFcfa: number;
   quantity: number;

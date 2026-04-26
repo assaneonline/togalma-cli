@@ -36,10 +36,6 @@ function resetFg() {
   return "\x1b[39m";
 }
 
-function resetBg() {
-  return "\x1b[49m";
-}
-
 type ColorMode = "truecolor" | "ansi256" | "mono";
 
 function detectColorMode(): ColorMode {
@@ -244,15 +240,10 @@ export async function playMenuSplash(): Promise<void> {
   for (let i = 0; i < frames; i++) {
     const t = frames === 1 ? 0 : i / (frames - 1); // 0..1
     const theta = t * Math.PI; // 0..π
-    // Rotation around Y axis (vertical): simulate by squashing X and mirroring after midpoint.
     const rotX = Math.max(0.08, Math.abs(Math.cos(theta)));
     const flipX = theta > Math.PI / 2;
-
-    // Combine with uniform shrink (zoom) centered on the logo.
-    // Strongest shrink at mid animation; subtle at ends.
     const shrinkAmp = 0.18;
     const zoom = 1 - shrinkAmp * Math.sin(Math.PI * t);
-
     const lines = await renderLogoAnsiLines({
       pngPath: path,
       widthCols: width,
