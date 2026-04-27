@@ -137,10 +137,14 @@ async function interactiveOrderFromItems(s: Session, items: any[], defaultDate: 
     const item = picked.item;
 
     try {
-      const { variantLabel, unitPriceFcfa, orderItemId } = await pickVariant(item, {
+      const pickedVariant = await pickVariant(item, {
         debug,
         allowedFormulaire: s.user?.formulaireAccessible ?? null,
       });
+      if (pickedVariant.kind === "back") {
+        continue;
+      }
+      const { variantLabel, unitPriceFcfa, orderItemId } = pickedVariant;
       const quantity = await promptQuantity(1);
 
       const existing = cart.find(

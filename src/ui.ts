@@ -145,11 +145,15 @@ function variantToPrice(variant: MenuItemVariant): number | null {
 export async function pickVariant(
   item: MenuItem,
   opts: { debug?: boolean; allowedFormulaire?: string | null } = {}
-): Promise<{
-  orderItemId: string;
-  variantLabel: string;
-  unitPriceFcfa: number;
-}> {
+): Promise<
+  | { kind: "back" }
+  | {
+      kind: "picked";
+      orderItemId: string;
+      variantLabel: string;
+      unitPriceFcfa: number;
+    }
+> {
   const debug = !!opts.debug;
   const allowedFormulaire =
     typeof opts.allowedFormulaire === "string" && opts.allowedFormulaire.trim() !== ""
@@ -167,6 +171,7 @@ export async function pickVariant(
         process.stdout.write(chalk.magenta(`  [DBG] variant=${label} formulaire=${formulaire}\n`));
       }
       return {
+        kind: "picked",
         orderItemId: item.id,
         variantLabel: label,
         unitPriceFcfa: Math.round(pRaw),
@@ -175,10 +180,10 @@ export async function pickVariant(
     // Some menu rows are included/free but don't expose a numeric price.
     const name = (item.name ?? "").toString();
     if (/(OFFERT|INCLUS)/i.test(name)) {
-      return { orderItemId: item.id, variantLabel: "inclus", unitPriceFcfa: 0 };
+      return { kind: "picked", orderItemId: item.id, variantLabel: "inclus", unitPriceFcfa: 0 };
     }
     // Last-resort fallback: keep the flow going instead of aborting order creation.
-    return { orderItemId: item.id, variantLabel: "inclus", unitPriceFcfa: 0 };
+    return { kind: "picked", orderItemId: item.id, variantLabel: "inclus", unitPriceFcfa: 0 };
   }
 
   const variantsFiltered =
@@ -225,22 +230,32 @@ export async function pickVariant(
     // If variants exist but we couldn't extract prices, allow as included when name suggests it.
     const name = (item.name ?? "").toString();
     if (/(OFFERT|INCLUS)/i.test(name)) {
-      return { orderItemId: item.id, variantLabel: "inclus", unitPriceFcfa: 0 };
+      return { kind: "picked", orderItemId: item.id, variantLabel: "inclus", unitPriceFcfa: 0 };
     }
     // Last-resort fallback: treat as included.
-    return { orderItemId: item.id, variantLabel: "inclus", unitPriceFcfa: 0 };
+    return { kind: "picked", orderItemId: item.id, variantLabel: "inclus", unitPriceFcfa: 0 };
   }
 
   const v = await select({
     message: `Choisir un format pour: ${item.name}`,
-    choices,
+    choices: [
+      {
+        name: chalk.gray("⬅︎ Retour (choisir un autre item)"),
+        value: { label: "__BACK__", price: 0, id: null },
+      },
+      ...choices,
+    ],
     pageSize: 10,
     theme: selectThemeWithQuitHint(),
   });
 
+  if (v.label === "__BACK__") {
+    return { kind: "back" };
+  }
+
   // For plats: variants are actual Airtable `Plats` records; order must link to that table.
   // For safety, fall back to the grouped item id if variant id is missing.
-  return { orderItemId: v.id ?? item.id, variantLabel: v.label, unitPriceFcfa: v.price };
+  return { kind: "picked", orderItemId: v.id ?? item.id, variantLabel: v.label, unitPriceFcfa: v.price };
 }
 
 export async function promptQuantity(defaultValue = 1): Promise<number> {
